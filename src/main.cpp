@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 #include <Preferences.h>
 #include <AccelStepper.h>
 #include <Adafruit_GFX.h>
@@ -40,6 +41,8 @@ constexpr uint16_t MIN_TPD = 0;
 constexpr uint16_t MAX_TPD = 2400;
 constexpr uint16_t TPD_STEP = 25;
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
+constexpr char SETUP_AP_SSID[] = "WatchWinder-Setup";
+constexpr uint8_t DNS_PORT = 53;
 
 enum DirectionMode : uint8_t {
   DIR_CLOCKWISE = 0,
@@ -62,6 +65,7 @@ struct AppSettings {
 AppSettings settings;
 Preferences prefs;
 WebServer server(80);
+DNSServer dnsServer;
 Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 
 const char *directionName(DirectionMode mode) {
@@ -254,8 +258,11 @@ bool displayDirty = true;
 uint32_t lastDisplayMs = 0;
 uint32_t wifiConnectStartedMs = 0;
 bool apMode = false;
+bool dnsPortalRunning = false;
 
 const char WIFI_CHARS[] = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:'\",.<>/?\\|`~";
+
+String htmlEscape(const String &value);
 
 void markDisplayDirty() {
   displayDirty = true;
@@ -263,8 +270,11 @@ void markDisplayDirty() {
 
 void startAccessPoint() {
   WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP("WatchWinder-Setup");
+  WiFi.softAP(SETUP_AP_SSID);
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+  dnsPortalRunning = true;
   apMode = true;
+  markDisplayDirty();
 }
 
 void beginWifiConnect() {
@@ -272,17 +282,60 @@ void beginWifiConnect() {
     startAccessPoint();
     return;
   }
-  WiFi.mode(WIFI_STA);
+
+  if (apMode) {
+    WiFi.mode(WIFI_AP_STA);
+  } else {
+    WiFi.mode(WIFI_STA);
+    dnsServer.stop();
+    dnsPortalRunning = false;
+  }
+
   WiFi.begin(settings.ssid.c_str(), settings.password.c_str());
   wifiConnectStartedMs = millis();
-  apMode = false;
+  markDisplayDirty();
 }
 
 void serviceWifi(uint32_t now) {
-  if (WiFi.getMode() == WIFI_STA && WiFi.status() != WL_CONNECTED &&
-      wifiConnectStartedMs != 0 && (now - wifiConnectStartedMs) > WIFI_CONNECT_TIMEOUT_MS) {
+  if (dnsPortalRunning) dnsServer.processNextRequest();
+
+  if (WiFi.status() == WL_CONNECTED && apMode) {
+    dnsServer.stop();
+    dnsPortalRunning = false;
+    WiFi.softAPdisconnect(true);
+    apMode = false;
+    wifiConnectStartedMs = 0;
+    markDisplayDirty();
+    return;
+  }
+
+  if (!apMode && WiFi.status() == WL_CONNECTED && wifiConnectStartedMs != 0) {
+    wifiConnectStartedMs = 0;
+    markDisplayDirty();
+  }
+
+  if (WiFi.status() != WL_CONNECTED && wifiConnectStartedMs != 0 &&
+      (now - wifiConnectStartedMs) > WIFI_CONNECT_TIMEOUT_MS) {
+    wifiConnectStartedMs = 0;
+    if (apMode) {
+      markDisplayDirty();
+      return;
+    }
     startAccessPoint();
   }
+}
+
+String activeIpAddress() {
+  if (WiFi.status() == WL_CONNECTED) return WiFi.localIP().toString();
+  if (apMode) return WiFi.softAPIP().toString();
+  return "Not connected";
+}
+
+String wifiStatusText() {
+  if (WiFi.status() == WL_CONNECTED) return "Connected to " + htmlEscape(WiFi.SSID());
+  if (apMode) return "Setup hotspot active";
+  if (settings.ssid.length() > 0) return "Connecting to " + htmlEscape(settings.ssid);
+  return "No WiFi configured";
 }
 
 String htmlEscape(const String &value) {
@@ -306,11 +359,25 @@ String dashboardHtml() {
                   "main{max-width:760px;margin:auto}section{background:white;border:1px solid #d9dde5;border-radius:8px;padding:16px;margin:14px 0}"
                   "label{display:block;margin:10px 0 4px;font-weight:600}input,select,button{font:inherit;padding:8px;border-radius:6px;border:1px solid #aeb6c4}"
                   "button{background:#1f6feb;color:white;border-color:#1f6feb;cursor:pointer}.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}"
+                  ".status{background:#eef6ff;border-color:#b7d7ff}.muted{color:#596273}"
                   "@media(max-width:640px){.row{grid-template-columns:1fr}}</style></head><body><main>"
-                  "<h1>3-Watch Winder</h1><p>");
-  html += WiFi.status() == WL_CONNECTED ? "Connected to " + htmlEscape(WiFi.SSID()) + " at " + WiFi.localIP().toString()
-                                        : "Setup AP: WatchWinder-Setup at " + WiFi.softAPIP().toString();
-  html += F("</p><form method='POST' action='/save'><div class='row'>");
+                  "<h1>3-Watch Winder</h1><section class='status'><h2>WiFi</h2><p>");
+  html += wifiStatusText();
+  html += F("</p><p><strong>Web address:</strong> http://");
+  html += activeIpAddress();
+  html += F("/</p>");
+  if (apMode) {
+    html += F("<p class='muted'>Connect your phone to ");
+    html += SETUP_AP_SSID;
+    html += F(", then open http://192.168.4.1/ if this page does not open automatically.</p>");
+  }
+  html += F("<form method='POST' action='/wifi'>"
+            "<label>Home WiFi SSID</label><input name='ssid' value='");
+  html += htmlEscape(settings.ssid);
+  html += F("'><label>Home WiFi Password</label><input name='pass' type='password' value='");
+  html += htmlEscape(settings.password);
+  html += F("'><p><button type='submit'>Save WiFi and Connect</button></p></form></section>"
+            "<form method='POST' action='/save'><div class='row'>");
 
   for (uint8_t i = 0; i < 3; i++) {
     html += F("<section><h2>Winder ");
@@ -339,12 +406,6 @@ String dashboardHtml() {
   }
 
   html += F("</div><button type='submit'>Save Winder Settings</button></form>"
-            "<section><h2>WiFi</h2><form method='POST' action='/wifi'>"
-            "<label>SSID</label><input name='ssid' value='");
-  html += htmlEscape(settings.ssid);
-  html += F("'><label>Password</label><input name='pass' type='password' value='");
-  html += htmlEscape(settings.password);
-  html += F("'><p><button type='submit'>Save WiFi and Reconnect</button></p></form></section>"
             "</main></body></html>");
   return html;
 }
@@ -379,8 +440,13 @@ void handleWifiSave() {
 
 void setupServer() {
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/generate_204", HTTP_GET, handleRoot);
+  server.on("/gen_204", HTTP_GET, handleRoot);
+  server.on("/hotspot-detect.html", HTTP_GET, handleRoot);
+  server.on("/fwlink", HTTP_GET, handleRoot);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/wifi", HTTP_POST, handleWifiSave);
+  server.onNotFound(handleRoot);
   server.begin();
 }
 
@@ -417,7 +483,12 @@ void drawStatus() {
     display.print(motors[i].moving() ? "*" : "-");
   }
   display.setCursor(0, 56);
-  display.print(F("K3 menu  K4 hold WiFi"));
+  if (WiFi.status() == WL_CONNECTED || apMode) {
+    display.print(F("IP "));
+    display.print(activeIpAddress());
+  } else {
+    display.print(F("K3 menu  K4 hold WiFi"));
+  }
   display.display();
 }
 
@@ -427,6 +498,8 @@ void drawMenu() {
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0, 0);
   display.print(F("Menu"));
+  display.setCursor(44, 0);
+  if (WiFi.status() == WL_CONNECTED || apMode) display.print(activeIpAddress());
   uint8_t first = menuIndex > 4 ? menuIndex - 4 : 0;
   for (uint8_t row = 0; row < 5 && first + row < 11; row++) {
     uint8_t idx = first + row;

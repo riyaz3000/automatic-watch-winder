@@ -66,7 +66,21 @@ WiFi password entry uses the four buttons:
 - Hold K3 saves and connects.
 - K4 deletes the last character, or returns to network selection if empty.
 
-If saved WiFi is missing or connection fails, the ESP32 starts `WatchWinder-Setup` access point mode. The web dashboard is available at the shown IP address.
+## WiFi Setup Hotspot
+
+If saved WiFi is missing or connection fails, the ESP32 starts an open setup hotspot:
+
+- SSID: `WatchWinder-Setup`
+- Setup address: `http://192.168.4.1/`
+
+Connect your phone to `WatchWinder-Setup`. Most phones will open the setup page automatically; if not, open `http://192.168.4.1/` in a browser. Enter your home WiFi SSID and password, then save.
+
+While joining your home WiFi, the setup hotspot stays active long enough for the form submission to complete. After the ESP32 connects successfully, it shuts down the setup hotspot and shows the home-network IP address on the OLED status screen and menu. Use that IP address from any device on the same WiFi network to adjust winder settings in the web GUI.
+
+The web GUI remains available in both modes:
+
+- Setup hotspot mode: use `http://192.168.4.1/`
+- Home WiFi mode: use the IP address shown on the OLED
 
 ## Motor Timing
 
