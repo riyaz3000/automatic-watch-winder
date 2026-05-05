@@ -14,19 +14,21 @@ constexpr uint8_t OLED_ADDR = 0x3C;
 constexpr uint8_t I2C_SDA = 21;
 constexpr uint8_t I2C_SCL = 22;
 
-// Buttons are active LOW. GPIO 34-39 have no internal pull-ups on ESP32,
-// so use 10k external pull-ups unless the OLED button board already has them.
-constexpr uint8_t BTN_UP = 34;      // K1
-constexpr uint8_t BTN_DOWN = 35;    // K2
-constexpr uint8_t BTN_SELECT = 36;  // K3 / hold to confirm WiFi password
-constexpr uint8_t BTN_BACK = 39;    // K4 / hold from status for WiFi setup
+// ESP32-DevKitC-32E header labels: VP=GPIO36, VN=GPIO39, IO34=GPIO34, IO35=GPIO35.
+// These pins are input-only and have no internal pull-ups, so use 10k external
+// pull-ups unless the OLED button board already provides stable active-LOW outputs.
+constexpr uint8_t BTN_UP = 36;      // K1 -> VP / GPIO36
+constexpr uint8_t BTN_DOWN = 39;    // K2 -> VN / GPIO39
+constexpr uint8_t BTN_SELECT = 34;  // K3 -> IO34 / GPIO34, hold to confirm WiFi password
+constexpr uint8_t BTN_BACK = 35;    // K4 -> IO35 / GPIO35, hold from status for WiFi setup
 constexpr bool BUTTONS_USE_INTERNAL_PULLUPS = false;
 
-// 28BYJ-48 + ULN2003, AccelStepper HALF4WIRE pin order is IN1, IN3, IN2, IN4.
+// 28BYJ-48 + ULN2003 on ESP32-DevKitC-32E.
+// AccelStepper HALF4WIRE constructor order is IN1, IN3, IN2, IN4.
 constexpr uint8_t MOTOR_PINS[3][4] = {
-  {13, 16, 14, 17},
-  {18, 23, 19, 25},
-  {26, 32, 27, 33},
+  {13, 27, 14, 26},  // W1 logical IN1=IO13, IN2=IO14, IN3=IO27, IN4=IO26
+  {25, 33, 32, 23},  // W2 logical IN1=IO25, IN2=IO32, IN3=IO33, IN4=IO23
+  {19, 18, 17, 16},  // W3 logical IN1=IO19, IN2=IO17, IN3=IO18, IN4=IO16
 };
 
 // Optional active-LOW physical enable switches. Leave as -1 if not fitted.

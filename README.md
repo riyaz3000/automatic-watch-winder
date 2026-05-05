@@ -12,32 +12,44 @@ pio run -t upload
 pio device monitor
 ```
 
-## Default Pin Map
+## ESP32-DevKitC-32E Pin Map
+
+This pin map is for the ESP32-DevKitC / ESP32-DevKitC-32E style board from the linked Amazon listing. It uses the header labels printed in Espressif's DevKitC documentation where possible.
 
 OLED I2C:
 
-- SDA: GPIO 21
-- SCL: GPIO 22
+- SDA: `IO21` / GPIO 21
+- SCL: `IO22` / GPIO 22
 - Address: `0x3C`
 
 Buttons:
 
-- K1 Up / Next: GPIO 34
-- K2 Down / Previous: GPIO 35
-- K3 Select / Confirm: GPIO 36
-- K4 Back / WiFi setup: GPIO 39
+- K1 Up / Next: `VP` / GPIO 36
+- K2 Down / Previous: `VN` / GPIO 39
+- K3 Select / Confirm: `IO34` / GPIO 34
+- K4 Back / WiFi setup: `IO35` / GPIO 35
 
-GPIO 34-39 are input-only and do not have internal pull-ups. Use 10k pull-ups to 3.3V unless the OLED board already provides stable active-LOW button outputs.
+GPIO 34, 35, 36, and 39 are input-only and do not have internal pull-ups. Use 10k pull-ups to 3.3V unless the OLED board already provides stable active-LOW button outputs.
 
 Motors via ULN2003:
 
-- Winder 1: GPIO 13, 14, 16, 17
-- Winder 2: GPIO 18, 19, 23, 25
-- Winder 3: GPIO 26, 27, 32, 33
+| Winder | ULN2003 IN1 | ULN2003 IN2 | ULN2003 IN3 | ULN2003 IN4 |
+| --- | --- | --- | --- | --- |
+| 1 | `IO13` / GPIO 13 | `IO14` / GPIO 14 | `IO27` / GPIO 27 | `IO26` / GPIO 26 |
+| 2 | `IO25` / GPIO 25 | `IO32` / GPIO 32 | `IO33` / GPIO 33 | `IO23` / GPIO 23 |
+| 3 | `IO19` / GPIO 19 | `IO17` / GPIO 17 | `IO18` / GPIO 18 | `IO16` / GPIO 16 |
 
-The firmware passes pins to AccelStepper in HALF4WIRE order as `IN1, IN3, IN2, IN4`, which is why each motor row appears reordered in code.
+The firmware passes pins to AccelStepper in HALF4WIRE constructor order as `IN1, IN3, IN2, IN4`, so the code array is intentionally ordered differently from the ULN2003 table above.
+
+Do not use GPIO 6-11. Espressif marks those pins as connected to the module's SPI flash interface.
 
 Optional physical enable switches are supported in `PHYSICAL_ENABLE_SWITCH_PINS` in [src/main.cpp](src/main.cpp). They are disabled by default with `-1`; when fitted, each switch is active LOW and uses the ESP32 internal pull-up.
+
+Power:
+
+- Power the ESP32 from USB or the board 5V input, but not both external board power methods at the same time.
+- Power the motors from the external 5V supply through the ULN2003 boards.
+- Connect ESP32 GND, ULN2003 GND, and motor power supply GND together.
 
 ## Operation
 
