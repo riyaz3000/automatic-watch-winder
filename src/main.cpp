@@ -467,9 +467,12 @@ void drawStatus() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0, 0);
-  display.print(F("Watch Winder"));
-  display.setCursor(86, 0);
-  display.print(WiFi.status() == WL_CONNECTED ? F("WiFi") : apMode ? F("AP") : F("----"));
+  if (WiFi.status() == WL_CONNECTED || apMode) {
+    display.print(F("IP "));
+    display.print(activeIpAddress());
+  } else {
+    display.print(F("Watch Winder"));
+  }
 
   for (uint8_t i = 0; i < 3; i++) {
     uint8_t y = 16 + i * 14;
@@ -484,8 +487,7 @@ void drawStatus() {
   }
   display.setCursor(0, 56);
   if (WiFi.status() == WL_CONNECTED || apMode) {
-    display.print(F("IP "));
-    display.print(activeIpAddress());
+    display.print(WiFi.status() == WL_CONNECTED ? F("WiFi dashboard ready") : F("Setup hotspot active"));
   } else {
     display.print(F("K3 menu  K4 hold WiFi"));
   }
