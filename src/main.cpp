@@ -178,7 +178,7 @@ class WinderMotor {
     nextBurstMs_ = now + BURST_PERIOD_MS;
   }
 
-  bool moving() const { return stepper_.distanceToGo() != 0; }
+  bool moving() { return stepper_.distanceToGo() != 0; }
   bool isActive() const {
     bool physicalEnabled = enableSwitchPin_ < 0 || digitalRead(enableSwitchPin_) == LOW;
     return cfg_->enabled && physicalEnabled;
