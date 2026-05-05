@@ -151,9 +151,11 @@ class WinderMotor {
 
   void update(uint32_t now) {
     stepper_.run();
+    moving_ = stepper_.distanceToGo() != 0;
 
     if (!isActive() || cfg_->tpd == 0) {
       if (stepper_.distanceToGo() == 0) stepper_.disableOutputs();
+      moving_ = false;
       return;
     }
 
@@ -175,10 +177,11 @@ class WinderMotor {
 
     stepper_.enableOutputs();
     stepper_.move(sign * burstSteps);
+    moving_ = true;
     nextBurstMs_ = now + BURST_PERIOD_MS;
   }
 
-  bool moving() { return stepper_.distanceToGo() != 0; }
+  bool moving() const { return moving_; }
   bool isActive() const {
     bool physicalEnabled = enableSwitchPin_ < 0 || digitalRead(enableSwitchPin_) == LOW;
     return cfg_->enabled && physicalEnabled;
@@ -192,6 +195,7 @@ class WinderMotor {
   uint32_t nextBurstMs_ = 0;
   double fractionalSteps_ = 0;
   bool bidirectionalFlip_ = false;
+  bool moving_ = false;
 };
 
 WinderMotor motors[3] = {
