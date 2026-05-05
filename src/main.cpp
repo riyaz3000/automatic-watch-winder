@@ -188,7 +188,7 @@ class WinderMotor {
   }
 
  private:
-  AccelStepper stepper_;
+  mutable AccelStepper stepper_;
   WinderSettings *cfg_ = nullptr;
   uint8_t index_ = 0;
   int8_t enableSwitchPin_ = -1;
